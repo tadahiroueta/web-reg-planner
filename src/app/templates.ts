@@ -62,8 +62,8 @@ enum Status {
 }
 
 type Section = {
-  letter: string;
-  number: number;
+  letter: string | null;
+  number: number | null;
 }
 
 type Units = {
@@ -97,30 +97,63 @@ type Waitlist = {
   turnedOff: boolean;
 }
 
-type Course = {
+export type Course = {
+  id: string;
+  title: string;
   classes: Class[];
-  comment: string;
+  comment: string | null;
 }
 
-class Class {
+export class Class {
   code: number;
   type: Type;
   section: Section;
   units: Units;
   instructor: string[];
   modality: Modality;
-  time: RecurringPeriod;
-  place: string;
-  final: ExactPeriod;
+  time: RecurringPeriod | undefined;
+  place: string | undefined | null; // undefined if TBA, null if online
+  final: ExactPeriod | undefined | null; // undefined if TBA, null if no final
   maximum: number;
   enrolled: Enrolled;
   waitlist: Waitlist;
   requests: number;
   newOnlyReserved: number;
   restrictions: Restriction[];
-  textbook: string;
-  website: string;
+  textbook: string | null;
+  website: string | null;
   status: Status;
+  comment: string | null = null;
+
+  /** 
+   * Initializes section from raw string
+   * 
+   * @param section raw string as given
+   * @returns section object
+   */
+  getSection(section: string): Section {
+    const letterFirst = isNaN(parseInt(section[0]));
+    if (letterFirst) {
+      return isNaN(parseInt(section[1])) ? {
+        letter: section.slice(0, 2),
+        number: parseInt(section.slice(2)) || null
+      } :
+      {
+        letter: section[0],
+        number: parseInt(section.slice(1)) || null
+      }
+    }
+    else {
+      return !isNaN(parseInt(section[1])) ? {
+        letter: section.slice(2) || null,
+        number: parseInt(section.slice(0, 2))
+      } :
+      {
+        letter: section.slice(1) || null,
+        number: parseInt(section[0])
+      }
+    }
+  }
 
   /**
    * Initializes time from raw string
@@ -128,13 +161,15 @@ class Class {
    * @param time raw string as given
    * @returns weekly recurring class period
    */
-  getTime(time: string): RecurringPeriod {
-    let [ dayPart, timePart ] = time.split('&nbsp;');
+  getTime(time: string): RecurringPeriod | undefined {
+    if (time.includes("TBA")) return undefined;
+    
+    let [ dayPart, timePart ] = time.split('\u00A0');
     dayPart = dayPart.trim();
     const days = [];
     for (let i = 0; i < dayPart.length; i++) {
       const letter = dayPart[i];
-      days.push(letter === "T" ? DayOfWeek[letter + dayPart[++i] as keyof typeof DayOfWeek] : DayOfWeek[letter as keyof typeof DayOfWeek]);
+      days.push(letter === "T" ? (letter + dayPart[++i]) as DayOfWeek : letter as DayOfWeek);
     }
     let [ start, end ] = timePart.split('-');
     const [ startHour, startMinutes ] = start.trim().split(':');
@@ -164,7 +199,10 @@ class Class {
    * @param term academic term
    * @returns exact date and time for final
    */
-  getFinal(final: string, term: string): ExactPeriod {
+  getFinal(final: string, term: string): ExactPeriod | undefined | null {
+    if (final.trim().length === 0) return null;
+    if (final.includes("TBA")) return undefined;
+    
     let [ _, monthPart, dayPart, timePart ] = final.split(' ');
     const year = parseInt(term.slice(-4));
     const month = Month[monthPart as keyof typeof Month];
@@ -201,21 +239,18 @@ class Class {
    * @param status 
    * @param term 
    */
-  constructor(code: string, type: string, section: string, units: string, instructor: string, modality: string, time: string, place: string, final: string, maximum: string, enrolled: string, waitlist: string, requests: string, newOnlyReserved: string, restrictions: string, textbook: string, website: string, status: string, term: string) {
+  constructor(code: string, type: string, section: string, units: string, instructor: string, modality: string, time: string, place: string, final: string, maximum: string, enrolled: string, waitlist: string, requests: string, newOnlyReserved: string, restrictions: string, textbook: string | null, website: string | null, status: string, term: string) {
     this.code = parseInt(code);
-    this.type = Type[type as keyof typeof Type];
-    this.section = {
-      letter: section[0],
-      number: parseInt(section.slice(1))
-    };
+    this.type = type as Type;
+    this.section = this.getSection(section);
     this.units = {
       min: parseInt(units.split('-')[0]),
       max: parseInt(units.split('-')[1] || units.split('-')[0])
     };
     this.instructor = instructor.split('<br />'); // TODO fix later
-    this.modality = Modality[modality as keyof typeof Modality];
+    this.modality = modality as Modality;
     this.time = this.getTime(time);
-    this.place = place;
+    this.place = place.includes("TBA") ? undefined : place.includes("ON LINE") ? null : place;
     this.final = this.getFinal(final, term);
     this.maximum = parseInt(maximum);
     this.enrolled = {
@@ -228,9 +263,17 @@ class Class {
     };
     this.requests = parseInt(requests);
     this.newOnlyReserved = parseInt(newOnlyReserved);
-    this.restrictions = restrictions.split('').map((restriction) => Restriction[restriction as keyof typeof Restriction] || null).filter((restriction) => restriction !== null);
+    this.restrictions = restrictions.replace(",", " ").split(' ').map((restriction) => restriction as Restriction).filter((restriction) => Object.values(Restriction).includes(restriction));
     this.textbook = textbook;
     this.website = website;
-    this.status = Status[status as keyof typeof Status];
+    this.status = status as Status;
+  }
+
+  /**
+   * @param other 
+   * @returns whether a lecture and a discussion/lab will match
+   */
+  matches(other: Class): boolean {
+    return this.section.letter && other.section.letter ? this.section.letter === other.section.letter : true;
   }
 }
