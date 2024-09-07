@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { Course, Class } from './templates';
 import departments from '../data/departments.json';
 import releaseDates from '../data/releaseDates.json';
+import { PlusCircleIcon } from '@heroicons/react/24/solid';
 
 const URL = "https://www.reg.uci.edu/perl/WebSoc";
 const searchParams = {
@@ -91,16 +92,59 @@ async function scrape() {
   }
 }
 
+function CourseLine({ data }: { data: Course }) {
+  return (
+    <div className="w-full flex flex-col">
+      {/* first line */}
+      <div className="w-full flex gap-4">
+        <p className="w-28 text-white">{ data.id }</p>
+      </div>
+      {/* second line */}
+    </div>
+  );
+}
+
 export default async function Home() {
-  // scrape();
-  // const { data } = await post(URL, { params: { ...searchParams, "YearTerm": getTerm(), "Dept": "I&C SCI" } });
-  const string = fs.readFileSync("./src/data/sample.html", "utf-8");
-  const term = getTerm()!;
-  const courses = parseCourses(string, term);
+  let courses: Course[] = [
+    { id: "I&C SCI 32", title: "PROG SOFTWARE LIBR", classes: [
+      new Class("I&C SCI 32A", "PROG SOFTWARE LIBR", "LEC", "A", "MWF", "10:00-10:50", "CS 1800", "Pattis, Richard E.", "0", "0", "0", "0", "0", "0", "0", "https://uci.bncollege.com/shop/uci/page/find-textbooks", "https://www.ics.uci.edu/~pattis/ICS-32/", "0", "2021-2022 Fall")
+    ], comment: null }
+  ];
 
   return (
-    <main className='w-full h-screen p-8' style={{ whiteSpace: 'pre-line' }}>
-      { courses }
-    </main>
+    <body className='w-full min-h-screen bg-soft-dark-900 flex flex-col items-center'>
+      <head className="w-full bg-soft-dark-700 px-5 py-16 flex flex-col gap-6 items-center">
+        {/* inner head */}
+        <div className="w-full flex flex-col gap-6">
+          <h1 className="w-full text-4xl text-center text-white">Web Reg Planner</h1>
+          <p className="w-full tracking-tight text-center text-white">
+            Welcome to UC Irvine's Web Reg Planner! This website lets you enter a list of classes you're interested in and quickly generates a bunch of schedule options, making sure none of your classes overlap. Instead of manually going through class times, you’ll get a clean, visual display of possible weekly schedules, so you can pick the one that works best for you in no time.
+            <br />
+            <br />
+            Created by an incoming freshman, this tool is designed to help fellow students easily organize their course schedules and streamline the registration process for a stress-free quarter.
+          </p>
+        </div>
+      </head>
+      <main className="w-full flex flex-col items-center gap-10 px-5 py-16">
+        {/* left side */}
+        <div className="w-full flex flex-col items-center gap-16">
+          {/* course list input area */}
+          <div className="w-full rounded-2xl flex flex-col gap-4 px-3 py-4 bg-soft-dark-500">
+            <h2 className="font-medium text-xl text-white">Course list</h2>
+            {/* input bar */}
+            <div className="w-full rounded-3xl flex justify-between px-5 py-3 bg-soft-dark-700">
+              <input type="text" placeholder="Type here..." className='outline-none bg-transparent' />
+              <button>
+                <PlusCircleIcon className="h-6 w-6 text-white" />
+              </button>
+            </div>
+            {/* list of courses */}
+            <div className="w-full flex flex-col gap-3 px-4 py-2">
+              { courses.map((course, i) => <CourseLine data={ course } key={ i } />) }
+            </div>
+          </div>
+        </div>
+      </main>
+    </body>
   );
 }
