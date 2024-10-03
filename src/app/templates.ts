@@ -13,7 +13,7 @@ let Month = {
   Dec: 11
 }
 
-enum Type {
+export enum Type {
   Lecture = 'Lec',
   Lab = 'Lab',
   Discussion = 'Dis',
@@ -25,7 +25,7 @@ enum Modality {
   InPerson = 'In-Person'
 }
 
-enum DayOfWeek {
+export enum DayOfWeek {
   Monday = 'M',
   Tuesday = 'Tu',
   Wednesday = 'W',
@@ -54,7 +54,7 @@ enum Restriction {
   SeparateAuthorizationCodes = 'X'
 }
 
-enum Status {
+export enum Status {
   Open = 'OPEN',
   Waitlist = 'Waitl',
   Full = 'FULL',
@@ -97,13 +97,6 @@ type Waitlist = {
   turnedOff: boolean;
 }
 
-export type Course = {
-  id: string;
-  title: string;
-  classes: Class[];
-  comment: string | null;
-}
-
 export class Class {
   code: number;
   type: Type;
@@ -124,6 +117,8 @@ export class Class {
   website: string | null;
   status: Status;
   comment: string | null = null;
+  courseId: string;
+  colorId: number | null = null;
 
   /** 
    * Initializes section from raw string
@@ -182,11 +177,11 @@ export class Class {
     return {
       days,
       start: {
-        hour: parseInt(startHour) + (pm ? 12 : 0),
+        hour: parseInt(startHour) % 12 + (pm && parseInt(startHour) < 10 ? 12 : 0),
         minute: parseInt(startMinutes)
       },
       end: {
-        hour: parseInt(endHour) + (pm ? 12 : 0),
+        hour: parseInt(endHour) % 12 + (pm ? 12 : 0),
         minute: parseInt(endMinutes)
       }
     };
@@ -213,8 +208,8 @@ export class Class {
     let [ startHour, startMinutes ] = start.split(':');
     let [ endHour, endMinutes ] = end.split(':');
     return {
-      start: new Date(year, month, day, parseInt(startHour) + (pm ? 12 : 0), parseInt(startMinutes)),
-      end: new Date(year, month, day, parseInt(endHour) + (pm ? 12 : 0), parseInt(endMinutes))
+      start: new Date(year, month, day, parseInt(startHour) % 12 + (pm && parseInt(startHour) < 10 ? 12 : 0), parseInt(startMinutes)),
+      end: new Date(year, month, day, parseInt(endHour) % 12 + (pm ? 12 : 0), parseInt(endMinutes))
     }
   }
 
@@ -238,8 +233,9 @@ export class Class {
    * @param website 
    * @param status 
    * @param term 
+   * @param courseId
    */
-  constructor(code: string, type: string, section: string, units: string, instructor: string, modality: string, time: string, place: string, final: string, maximum: string, enrolled: string, waitlist: string, requests: string, newOnlyReserved: string, restrictions: string, textbook: string | null, website: string | null, status: string, term: string) {
+  constructor(code: string, type: string, section: string, units: string, instructor: string, modality: string, time: string, place: string, final: string, maximum: string, enrolled: string, waitlist: string, requests: string, newOnlyReserved: string, restrictions: string, textbook: string | null, website: string | null, status: string, term: string, courseId: string) {
     this.code = parseInt(code);
     this.type = type as Type;
     this.section = this.getSection(section);
@@ -267,6 +263,7 @@ export class Class {
     this.textbook = textbook;
     this.website = website;
     this.status = status as Status;
+    this.courseId = courseId;
   }
 
   /**
@@ -276,4 +273,71 @@ export class Class {
   matches(other: Class): boolean {
     return this.section.letter && other.section.letter ? this.section.letter === other.section.letter : true;
   }
+}
+
+export class Course {
+  id: string;
+  title: string;
+  classes: Class[] = [];
+  comment: string | null = null;
+  secondaryClassType: Type | null = null;
+
+  constructor(id: string, title: string) {
+    this.id = id;
+    this.title = title;
+  }
+
+  /**
+   * Adds a class to the course
+   * 
+   * @param klass 
+   */
+  addClass(klass: Class): void {
+    this.classes.push(klass);
+    if (klass.type === Type.Lecture) return;
+    this.secondaryClassType = klass.type;
+  }
+
+  /**
+   * @returns status of the course
+   */
+  getStatus(): Status {
+    return this.classes.filter((klass) => klass.type === Type.Lecture).every((klass) => klass.status === Status.Full) || (this.secondaryClassType !== null && this.classes.filter((klass) => klass.type === this.secondaryClassType).every((klass) => klass.status === Status.Full)) ? Status.Full : this.classes.filter((klass) => klass.type === Type.Lecture).some((klass) => klass.status === Status.Open || klass.status === Status.NewOnly) && (this.secondaryClassType === null || this.classes.filter((klass) => klass.type === this.secondaryClassType).some((klass) => klass.status === Status.Open || klass.status === Status.NewOnly)) ? Status.Open : Status.Waitlist;
+  }
+}
+
+export class ScheduleCourse extends Course {
+  lecture: Class;
+  secondaryClass: Class | null;
+
+  constructor(id: string, title: string, lecture: Class, secondaryClass: Class | null = null, comment: string | null = null) {
+    super(id, title);
+    this.lecture = lecture;
+    this.secondaryClass = secondaryClass;
+    this.comment = comment;
+  }
+}
+
+export class Schedule {
+  courses: ScheduleCourse[] = [];
+  classes: Class[] = [];
+  hours = new Map<string, Class>();
+
+  /**
+   * Adds a course to the schedule
+   * 
+   * @param course 
+   */
+  addCourse(course: ScheduleCourse): void {
+    this.courses.push(course);
+    course.lecture.colorId = this.courses.length - 1;
+    this.classes.push(course.lecture);
+    course.lecture.time?.days.forEach((day) => this.hours.set(day + course.lecture.time!.start.hour, course.lecture));
+    
+    if (course.secondaryClass) {
+      course.secondaryClass.colorId = this.courses.length - 1;
+      this.classes.push(course.secondaryClass);
+      course.secondaryClass.time?.days.forEach((day) => this.hours.set(day + course.secondaryClass!.time!.start.hour, course.secondaryClass!));
+    }
+  } 
 }
